@@ -51,11 +51,14 @@ def animate(frame):
     leapplot.reset_plot(ax)
     leapplot.reset_plot(ax2)
 
+    # No values have been collected yet
     if not len(leap_values):
         return
 
+    # Get latest leap value
     leap_value = leap_values[len(leap_values) - 1]
 
+    # Make sure that there's at last one hand detected
     if len(leap_value.hands) == 0:
         return
 
@@ -65,44 +68,6 @@ def animate(frame):
     patches = ax.scatter(points[0], points[1], points[2], s=[10] * 21, alpha=1)
     leapplot.plot_points(points, patches)
     leapplot.plot_bone_lines(points, ax)
-
-    hand = leap_value.hands[0]
-    angles = np.array(get_angles(hand))
-
-    X = [0]
-    Y = [0]
-    Z = [0]
-
-    for finger in range(0, 5):
-        for bone in range(0, 3):
-            pitch = angles[finger, bone, 0]
-            yaw = angles[finger, bone, 1]
-            roll = angles[finger, bone, 2]
-
-            theta = angles[finger, bone, :]
-
-            # theta = [pitch, yaw, roll]
-            rot_mat = get_rot_from_angles(theta)
-
-            # Which basis is this bone defined in???
-            b = leap_value.hands[0].digits[finger].bones[bone]
-            bone_len = np.linalg.norm(
-                np.array([b.prev_joint.x, b.prev_joint.y, b.prev_joint.z])
-                - np.array([b.next_joint.x, b.next_joint.y, b.next_joint.z])
-            )
-            new_bone = rot_mat.dot(np.array([0, bone_len, 0]))
-
-            x = X[finger * 3 + bone] + new_bone[0]
-            y = Y[finger * 3 + bone] + new_bone[1]
-            z = Z[finger * 3 + bone] + new_bone[2]
-
-            X.append(x)
-            Y.append(y)
-            Z.append(z)
-
-    # Convert to a numpy array
-    a_points = [X, Z, Y]
-    a_points = np.array(a_points)
 
     # Creating the 2nd plot
     angle_plot = ax2.scatter(a_points[0], a_points[1], a_points[2], alpha=1)
