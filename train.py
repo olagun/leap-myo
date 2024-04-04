@@ -11,6 +11,7 @@ def identity_block(x):
     x = keras.layers.Conv2D(kernel_size=(3, 2), padding="same")(x)
     x = keras.layers.BatchNormalization(axis=1)(x)
     x = keras.layers.ReLU()(x)
+    x = keras.layers.Dropout(0.05)(x)
     x = keras.layers.Add()([x, x_skip])
 
     return x
