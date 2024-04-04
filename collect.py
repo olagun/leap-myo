@@ -12,6 +12,7 @@ from mpl_toolkits.mplot3d import Axes3D
 import mpl_toolkits.mplot3d as plt3d
 import plot as leapplot
 import threading
+from utils import get_angles, get_rot_from_angles
 
 # Settings
 sample_rate = 200
@@ -41,7 +42,6 @@ points = np.zeros((3, NUM_POINTS))
 a_points = np.zeros((3, 16))
 patches = ax.scatter(points[0], points[1], points[2], s=[20] * NUM_POINTS, alpha=1)
 angle_plot = ax2.scatter(a_points[0], a_points[1], a_points[2], s=[10] * 16, alpha=1)
-
 
 finger_bones = ["metacarpals", "proximal", "intermediate", "distal"]
 
