@@ -4,6 +4,13 @@ import pandas as pd
 from matplotlib import animation
 from mpl_toolkits.mplot3d import Axes3D
 import mpl_toolkits.mplot3d as plt3d
+from utils import (
+    get_angles,
+    get_rot_from_angles,
+    quaternion_rotation_matrix,
+    get_angles_from_rot,
+    euler_from_quaternion,
+)
 
 # Leap Motion Hand Animation
 finger_bones = ["metacarpals", "proximal", "intermediate", "distal"]
@@ -200,7 +207,7 @@ def plot_bone_lines(points, ax):
 
     # For Each of the 5 fingers
     for i in range(0, 5):
-        n = 4 * i + 1
+        n = 4 * i
 
         # Get each of the bones
         mcp = points[:, n + 0]
@@ -244,27 +251,23 @@ def plot_bone_lines(points, ax):
 
 def get_bone_points(hand):
     """
-    Uses 4 joints for each finger, 3 for the thumb and 1 for the palm.
+    Uses 4 joints for each finger, 3 for the thumb
     """
     X = []
     Y = []
     Z = []
 
-    # Add the position of the palms
-    X.append(-1 * hand.palm.position.x)
-    Y.append(hand.palm.position.y)
-    Z.append(hand.palm.position.z)
-
-    # Add fingers
+    # thumb, index, middle, ring, pinky
     for digit_index in range(0, 5):
         digit = hand.digits[digit_index]
 
+        # metacarpal, proximal, intermediate, distal
         for bone_index in range(0, 4):
             """
-            0 = JOINT_MCP – The metacarpophalangeal joint, or knuckle, of the finger.
-            1 = JOINT_PIP – The proximal interphalangeal joint of the finger. This joint is the middle joint of a finger.
-            2 = JOINT_DIP – The distal interphalangeal joint of the finger. This joint is closest to the tip.
-            3 = JOINT_TIP – The tip of the finger.
+            0 = metacarpophalangeal joint, or knuckle, of the finger.
+            1 = proximal interphalangeal joint of the finger. This joint is the middle joint of a finger.
+            2 = distal interphalangeal joint of the finger. This joint is closest to the tip.
+            3 = tip of the finger.
             """
 
             bone = digit.bones[bone_index]
@@ -274,6 +277,24 @@ def get_bone_points(hand):
             Z.append(bone.prev_joint[2])
 
     return np.array([X, Z, Y])
+
+
+def get_joint_angles(hand):
+    """
+    Returns 16 joint angles from a hand
+    """
+    joint_angles = []
+
+    for d in range(0, 5):
+        # Thumb
+        if d == 0:
+            tm = hand.digits[d].proximal
+            mcp = hand.digits[d].intermediate
+
+            joint_angles.append(())
+        else:
+            # Other fingers
+            pass
 
 
 def get_rel_bone_points(controller):

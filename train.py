@@ -9,7 +9,7 @@ def identity_block(x):
     x_skip = x
 
     x = keras.layers.Conv2D(kernel_size=(3, 2), padding="same")(x)
-    x = keras.layers.BatchNormalization(axis=1)(x)
+    x = keras.layers.BatchNormalization()(x)
     x = keras.layers.ReLU()(x)
     x = keras.layers.Dropout(0.05)(x)
     x = keras.layers.Add()([x, x_skip])
@@ -27,7 +27,7 @@ def neuropose():
 
     for filter_size, pool_size in zip(filter_count, pool_sizes):
         x = keras.layers.Conv2D(filter_size, kernel_size=(3, 2), padding="same")(x)
-        x = keras.layers.BatchNormalization(axis=1)(x)
+        x = keras.layers.BatchNormalization()(x)
         x = keras.layers.ReLU()(x)
         x = keras.layers.Dropout(0.05)(x)
         x = keras.layers.MaxPooling2D(pool_size=pool_size)(x)
@@ -43,10 +43,10 @@ def neuropose():
 
     for filter_size, pool_size in zip(filter_count, pool_sizes):
         x = keras.layers.Conv2D(filter_size, kernel_size=(3, 2), padding="same")(x)
-        x = keras.layers.BatchNormalization(axis=1)(x)
+        x = keras.layers.BatchNormalization()(x)
         x = keras.layers.ReLU()(x)
         x = keras.layers.Dropout(0.05)(x)
-        x = keras.layers.UpSampling2D(size=pool_sizes)(x)
+        x = keras.layers.UpSampling2D(size=pool_size)(x)
 
     x = keras.layers.Flatten()(x)
     x = keras.layers.Dense(16)(x)
