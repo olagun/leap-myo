@@ -43,31 +43,11 @@ for i in range(0, df.shape[0] - 1000):
 def loss_mse(indices, y_actual, y_predicted):
     return K.mean(
         K.square(
-            np.take(y_actual.numpy(), indices) - np.take(y_predicted.numpy(), indices)
+            np.take(y_actual.numpy(), indices, axis=1)
+            - np.take(y_predicted.numpy(), indices, axis=1)
         ),
         axis=-1,
     )
-
-
-def loss(y_actual, y_predicted):
-    # print(y_actual, y_predicted)
-    # print()
-    # print()
-    # print()
-    # print()
-    # print(y_actual, y_predicted)
-    # print(y_actual, y_predicted)
-    # print(y_actual, y_predicted)
-    # print(y_actual, y_predicted)
-
-    loss_mcp_fe = loss_mse([4, 7, 10, 13], y_actual, y_predicted)
-    loss_mcp_aa = loss_mse([5, 8, 11, 14], y_actual, y_predicted)
-    loss_pip = loss_mse([6, 9, 12, 15], y_actual, y_predicted)
-    loss_thumb = loss_mse([3, 2, 1, 0], y_actual, y_predicted)
-
-    print(loss_mcp_fe + loss_mcp_aa + loss_pip + loss_thumb)
-
-    return loss_mcp_fe + loss_mcp_aa + loss_pip + loss_thumb
 
 
 def identity_block(x):
@@ -127,23 +107,23 @@ model.summary()
 
 model.compile(
     loss="mse",
-    optimizer="adam",
+    optimizer=tf.keras.optimizers.legacy.Adam(learning_rate=0.01),
     metrics=["accuracy"],
     run_eagerly=True,
 )
 
 batch_size = 128
-epochs = 20
+epochs = 10
 
-# print(np.array(x_train).shape)
-# print(np.array(y_train).shape)
+print(df)
+# print(y_train)
 
-model.fit(
-    np.array(x_train),
-    np.array(y_train),
-    batch_size=batch_size,
-    epochs=epochs,
-    validation_split=0.15,
-)
+# model.fit(
+#     np.array(x_train),
+#     np.array(y_train),
+#     batch_size=batch_size,
+#     epochs=epochs,
+#     validation_split=0.15,
+# )
 
 # model.save("model.keras")

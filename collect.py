@@ -14,7 +14,7 @@ import multiprocessing as mp
 import numpy as np
 import pandas as pd
 
-sample_rate = 50
+sample_rate = 200
 
 
 def leap_process_data(data, leap_data):
@@ -149,7 +149,11 @@ if __name__ == "__main__":
             myo_data = manager.list()
 
             leap_thread = mp.Process(
-                target=leap_collect, args=(leap_process_data, leap_data)
+                target=leap_collect,
+                args=(
+                    leap_process_data,
+                    leap_data,
+                ),
             )
             myo_thread = mp.Process(target=myo_collect, args=(myo_data,))
             plot_thread = mp.Process(target=plot, args=(leap_data,))
@@ -167,7 +171,6 @@ if __name__ == "__main__":
             while running:
                 time.sleep(0)
 
-                
         finally:
             df = pd.DataFrame(list(rows))
             df.to_csv("data.csv", index=False)
