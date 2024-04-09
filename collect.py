@@ -101,7 +101,7 @@ def data_collect(rows, leap_samples, myo_samples):
         myo_sample = myo_samples[-1]
 
         for i in range(0, len(myo_sample)):
-            data[f"channel_{i}"] = myo_sample[i]
+            data[f"channel_{i + 1}"] = myo_sample[i]
 
         rows.append(data)
 
@@ -151,14 +151,14 @@ if __name__ == "__main__":
             leap_thread = mp.Process(
                 target=leap_collect, args=(leap_process_data, leap_data)
             )
-            # myo_thread = mp.Process(target=myo_collect, args=(myo_data,))
+            myo_thread = mp.Process(target=myo_collect, args=(myo_data,))
             plot_thread = mp.Process(target=plot, args=(leap_data,))
             data_thread = mp.Process(
                 target=data_collect, args=(rows, leap_data, myo_data)
             )
 
             leap_thread.start()
-            # myo_thread.start()
+            myo_thread.start()
             plot_thread.start()
             data_thread.start()
 
@@ -166,6 +166,8 @@ if __name__ == "__main__":
 
             while running:
                 time.sleep(0)
+
+                
         finally:
-            df = pd.DataFrame.from_dict(list(rows))
-            df.to_csv("data.csv")
+            df = pd.DataFrame(list(rows))
+            df.to_csv("data.csv", index=False)
