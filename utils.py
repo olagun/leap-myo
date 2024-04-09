@@ -4,6 +4,217 @@ import math
 import numpy as np
 import math as m
 
+import plot as leapplot
+
+digit_labels = ["thumb", "index", "middle", "ring", "pinky"]
+
+bone_labels = ["metacarpal", "proximal", "intermediate", "distal"]
+
+
+# Reconstruct hand from joint angles
+def get_points_from_angles(anchor_points, bone_lengths, joint_angles):
+    x = []
+    y = []
+    z = []
+
+    for digit, angle in joint_angles.items():
+        if digit == "thumb":
+            anchor_point = np.array(
+                [
+                    [-anchor_points[digit][1][0]],
+                    [anchor_points[digit][1][2]],
+                    [anchor_points[digit][1][1]],
+                ]
+            )
+
+            x.append(anchor_point[0, 0])
+            y.append(anchor_point[1, 0])
+            z.append(anchor_point[2, 0])
+
+            # Trapeziometacarapl
+            fe_angle = angle["tm,f/e"]
+            aa_angle = angle["tm,aa"]
+
+            digit_vector = np.array([[0], [-bone_lengths[digit][1]], [0]])
+            to_from = anchor_point + np.dot(
+                Rz(-aa_angle), np.dot(Rx(-fe_angle), digit_vector)
+            )
+
+            x.append(to_from[0, 0])
+            y.append(to_from[1, 0])
+            z.append(to_from[2, 0])
+
+            # Metacarpophalangeal
+            fe_angle = angle["mcp,f/e"]
+            aa_angle = angle["mcp,aa"]
+
+            norm_vector = to_from - anchor_point
+            norm_vector /= np.linalg.norm(norm_vector)
+            norm_vector = np.dot(
+                Rz(-aa_angle + angle["tm,aa"]),
+                np.dot(Rx(-fe_angle + angle["tm,f/e"]), norm_vector),
+            )
+            norm_vector *= bone_lengths[digit][2]
+            norm_vector += to_from
+
+            x.append(norm_vector[0, 0])
+            y.append(norm_vector[1, 0])
+            z.append(norm_vector[2, 0])
+
+        if digit != "thumb":
+            anchor_point = np.array(
+                [
+                    [-anchor_points[digit][1][0]],
+                    [anchor_points[digit][1][2]],
+                    [anchor_points[digit][1][1]],
+                ]
+            )
+
+            x.append(anchor_point[0, 0])
+            y.append(anchor_point[1, 0])
+            z.append(anchor_point[2, 0])
+
+            # Metacarpophalangeal
+            fe_angle = angle["mcp,f/e"]
+            aa_angle = angle["mcp,aa"]
+
+            digit_vector = np.array([[0], [-bone_lengths[digit][1]], [0]])
+            to_from = anchor_point + np.dot(
+                Rz(-aa_angle), np.dot(Rx(-fe_angle), digit_vector)
+            )
+
+            x.append(to_from[0, 0])
+            y.append(to_from[1, 0])
+            z.append(to_from[2, 0])
+
+            # Proximal Interphalangeal
+            fe_angle = angle["pip"]
+
+            norm_vector = to_from - anchor_point
+            norm_vector /= np.linalg.norm(norm_vector)
+            norm_vector = Rx(-fe_angle) @ norm_vector
+            norm_vector *= bone_lengths[digit][2]
+            norm_vector += to_from
+
+            x.append(norm_vector[0, 0])
+            y.append(norm_vector[1, 0])
+            z.append(norm_vector[2, 0])
+
+            # # Distal Interphalangeal
+            # angle = math.acos(
+            #     norm_vector.dot(to_from)
+            #     / (np.linalg.norm(to_from) * np.linalg.norm(norm_vector))
+            # )
+
+            # fe_angle = 2 / 3 * angle
+            # norm_vector = norm_vector -
+
+    return x, y, z
+
+
+def get_bone_lengths(hand):
+    bone_lengths = {}
+
+    # Thumb, Index, Middle, Ring, Pinky
+    for d in range(0, 5):
+        bone_lengths[digit_labels[d]] = {}
+
+        # Metacarpal, Proximal, Intermediate, Distal
+        for b in range(0, 4):
+            prev_joint = np.array(
+                [
+                    hand.digits[d].bones[b].prev_joint.x,
+                    hand.digits[d].bones[b].prev_joint.y,
+                    hand.digits[d].bones[b].prev_joint.z,
+                ]
+            )
+
+            next_joint = np.array(
+                [
+                    hand.digits[d].bones[b].next_joint.x,
+                    hand.digits[d].bones[b].next_joint.y,
+                    hand.digits[d].bones[b].next_joint.z,
+                ]
+            )
+
+            bone_lengths[digit_labels[d]][b] = np.linalg.norm(next_joint - prev_joint)
+
+    return bone_lengths
+
+
+def get_joint_angles(hand):
+    joint_angles = {}
+
+    # Thumb, Index, Middle, Ring, Pinky
+    for d in range(0, 5):
+        joint_angles[digit_labels[d]] = {}
+
+        # Metacarpal, Proximal, Intermediate, Distal
+        for b in range(0, 4):
+            prev_joint = np.array(
+                [
+                    hand.digits[d].bones[b].prev_joint.x,
+                    hand.digits[d].bones[b].prev_joint.y,
+                    hand.digits[d].bones[b].prev_joint.z,
+                ]
+            )
+
+            next_joint = np.array(
+                [
+                    hand.digits[d].bones[b].next_joint.x,
+                    hand.digits[d].bones[b].next_joint.y,
+                    hand.digits[d].bones[b].next_joint.z,
+                ]
+            )
+
+            to_from = next_joint - prev_joint
+            to_from = np.array([-to_from[0], to_from[2], to_from[1]])
+
+            aa_angle = -math.atan2(to_from[0], -to_from[1])
+            fe_angle = math.atan2(to_from[2], -to_from[1])
+
+            # Thumb
+            if d == 0:
+                # Trapeziometacarpal
+                if b == 1:
+                    joint_angles["thumb"]["tm,f/e"] = fe_angle
+                    joint_angles["thumb"]["tm,aa"] = aa_angle
+                # Metacarpophalangeal
+                elif b == 2:
+                    joint_angles["thumb"]["mcp,f/e"] = fe_angle
+                    joint_angles["thumb"]["mcp,aa"] = aa_angle
+            # Other fingers
+            else:
+                # Metacarpophalangeal
+                if b == 1:
+                    joint_angles[digit_labels[d]]["mcp,f/e"] = fe_angle
+                    joint_angles[digit_labels[d]]["mcp,aa"] = aa_angle
+                # Proximal Interphalangeal
+                elif b == 2:
+                    joint_angles[digit_labels[d]]["pip"] = fe_angle
+
+    return joint_angles
+
+
+def get_anchor_points(hand):
+    anchor_points = {}
+
+    # Thumb, Index, Middle, Ring, Pinky
+    for d in range(0, 5):
+        anchor_points[digit_labels[d]] = {}
+
+        # Metacarpal, Proximal, Intermediate, Distal
+        for b in range(0, 4):
+            anchor_points[digit_labels[d]][b] = np.array(
+                [
+                    hand.digits[d].bones[b].prev_joint.x,
+                    hand.digits[d].bones[b].prev_joint.y,
+                    hand.digits[d].bones[b].prev_joint.z,
+                ]
+            )
+
+    return anchor_points
+
 
 def Rx(theta):
     return np.matrix(

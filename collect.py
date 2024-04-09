@@ -1,29 +1,25 @@
 from myo_api import Myo, emg_mode
-from leap_api import TrackingListener
 import leap as lp
 import pandas as pd
-import math
-import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib import animation
-import mpl_toolkits.mplot3d as plt3d
 import plot as leapplot
 import threading
-from utils import Ry, Rx, Rz
+from utils import (
+    get_anchor_points,
+    get_joint_angles,
+    get_bone_lengths,
+    get_points_from_angles,
+)
 import time
-from multiprocessing import Process
-
 
 # Settings
-sample_rate = 40
+sample_rate = 100
 
-# Data
-myo_values = []
-leap_values = []
-leap_data_points = []
-df = pd.DataFrame()
-
-NUM_POINTS = 30
+# Samples
+myo_samples = []
+leap_samples = []
+leap_joint_angle_samples = []
 
 # Matplotlib
 fig = plt.figure()
@@ -39,216 +35,52 @@ ax2 = fig.add_subplot(
 ax.view_init(elev=45.0, azim=122)
 ax2.view_init(elev=45.0, azim=122)
 
-points = np.zeros((3, NUM_POINTS))
-a_points = np.zeros((3, 16))
-patches = ax.scatter(points[0], points[1], points[2], s=[20] * NUM_POINTS, alpha=1)
-
 
 def animate(frame):
-    # Reset the plots
     leapplot.reset_plot(ax)
     leapplot.reset_plot(ax2)
 
-    # No values have been collected yet
-    if not len(leap_values):
+    # Get hand
+    leap_sample = leap_samples[-1] if len(leap_samples) else None
+
+    if not leap_sample or len(leap_sample.hands) == 0:
         return
 
-    # Get latest leap value
-    leap_value = leap_values[len(leap_values) - 1]
-
-    # Make sure that there's at last one hand detected
-    if not leap_value or len(leap_value.hands) == 0:
-        return
-
-    hand = leap_value.hands[0]
-    points = leapplot.get_bone_points(hand)
+    hand = leap_sample.hands[0]
 
     # First plot
+    x, y, z = leapplot.get_bone_points(hand)
+
     ax.scatter(
-        points[0],
-        points[1],
-        points[2],
-        s=[10] * len(points[0]),
+        x,
+        y,
+        z,
+        s=[10] * len(x),
         alpha=1,
     )
 
-    # Second Plot (Reconstructed from joint angles)
-    x = []
-    y = []
-    z = []
+    # Second plot (reconstructed from joint angles)
+    anchor_points = get_anchor_points(hand)
+    joint_angles = get_joint_angles(hand)
+    bone_lengths = get_bone_lengths(hand)
 
-    anchor_points = {}
-    bone_lengths = {}
-    joint_angles = {}
-
-    digit_labels = ["thumb", "index", "middle", "ring", "pinky"]
-
-    # Thumb, Index, Middle, Ring, Pinky
-    for d in range(0, 5):
-        digit = hand.digits[d]
-
-        bone_lengths[digit_labels[d]] = {}
-        joint_angles[digit_labels[d]] = {}
-        anchor_points[digit_labels[d]] = {}
-
-        # Metacarpal, Proximal, Intermediate, Distal
-        for b in range(0, 4):
-            bone = digit.bones[b]
-
-            prev_joint = np.array(
-                [bone.prev_joint.x, bone.prev_joint.y, bone.prev_joint.z]
-            )
-
-            anchor_points[digit_labels[d]][b] = prev_joint
-
-            next_joint = np.array(
-                [bone.next_joint.x, bone.next_joint.y, bone.next_joint.z]
-            )
-
-            to_from = next_joint - prev_joint
-            bone_lengths[digit_labels[d]][b] = np.linalg.norm(to_from)
-            to_from = np.array([-to_from[0], to_from[2], to_from[1]])
-
-            aa_angle = -math.atan2(to_from[0], -to_from[1])
-            fe_angle = math.atan2(to_from[2], -to_from[1])
-
-            # if digit_labels[d] == "index" and b == 1:
-            #     ax2.text(0, 0, 0, f"fe angle: {fe_angle * 180 / math.pi}", size=10)
-            #     ax2.text(0, 40, 0, f"aa angle: {aa_angle * 180 / math.pi}", size=10)
-
-            # line = plt3d.art3d.Line3D([0, to_from[0]], [0, to_from[1]], [0, to_from[2]])
-            # ax2.add_line(line)
-
-            # Thumb
-            if d == 0:
-                # Trapeziometacarpal
-                if b == 1:
-                    joint_angles["thumb"]["tm,f/e"] = fe_angle
-                    joint_angles["thumb"]["tm,aa"] = aa_angle
-                # Metacarpophalangeal
-                elif b == 2:
-                    joint_angles["thumb"]["mcp,f/e"] = fe_angle
-                    joint_angles["thumb"]["mcp,aa"] = aa_angle
-            # Other fingers
-            else:
-                # Metacarpophalangeal
-                if b == 1:
-                    joint_angles[digit_labels[d]]["mcp,f/e"] = fe_angle
-                    joint_angles[digit_labels[d]]["mcp,aa"] = aa_angle
-                # Proximal Interphalangeal
-                elif b == 2:
-                    joint_angles[digit_labels[d]]["pip"] = fe_angle
-
-    x.append(0)
-    y.append(0)
-    z.append(0)
-
-    value = {}
-
-    # Reconstruct hand from joint angles
-    for digit, angle in joint_angles.items():
-        if digit == "thumb":
-            anchor_point = np.array(
-                [
-                    [-anchor_points[digit][1][0]],
-                    [anchor_points[digit][1][2]],
-                    [anchor_points[digit][1][1]],
-                ]
-            )
-
-            x.append(anchor_point[0, 0])
-            y.append(anchor_point[1, 0])
-            z.append(anchor_point[2, 0])
-
-            # Trapeziometacarapl
-            fe_angle = angle["tm,f/e"]
-            aa_angle = angle["tm,aa"]
-
-            digit_vector = np.array([[0], [-bone_lengths[digit][1]], [0]])
-            to_from = anchor_point + np.dot(
-                Rz(-aa_angle), np.dot(Rx(-fe_angle), digit_vector)
-            )
-
-            x.append(to_from[0, 0])
-            y.append(to_from[1, 0])
-            z.append(to_from[2, 0])
-
-            # Metacarpophalangeal
-            fe_angle = angle["mcp,f/e"]
-            aa_angle = angle["mcp,aa"]
-
-            norm_vector = to_from - anchor_point
-            norm_vector /= np.linalg.norm(norm_vector)
-            norm_vector = np.dot(
-                Rz(-aa_angle + angle["tm,aa"]),
-                np.dot(Rx(-fe_angle + angle["tm,f/e"]), norm_vector),
-            )
-            norm_vector *= bone_lengths[digit][2]
-            norm_vector += to_from
-
-            x.append(norm_vector[0, 0])
-            y.append(norm_vector[1, 0])
-            z.append(norm_vector[2, 0])
-
-        if digit != "thumb":
-            anchor_point = np.array(
-                [
-                    [-anchor_points[digit][1][0]],
-                    [anchor_points[digit][1][2]],
-                    [anchor_points[digit][1][1]],
-                ]
-            )
-
-            x.append(anchor_point[0, 0])
-            y.append(anchor_point[1, 0])
-            z.append(anchor_point[2, 0])
-
-            # Metacarpophalangeal
-            fe_angle = angle["mcp,f/e"]
-            aa_angle = angle["mcp,aa"]
-
-            digit_vector = np.array([[0], [-bone_lengths[digit][1]], [0]])
-            to_from = anchor_point + np.dot(
-                Rz(-aa_angle), np.dot(Rx(-fe_angle), digit_vector)
-            )
-
-            x.append(to_from[0, 0])
-            y.append(to_from[1, 0])
-            z.append(to_from[2, 0])
-
-            # Proximal Interphalangeal
-            fe_angle = angle["pip"]
-
-            norm_vector = to_from - anchor_point
-            norm_vector /= np.linalg.norm(norm_vector)
-            norm_vector = Rx(-fe_angle) @ norm_vector
-            norm_vector *= bone_lengths[digit][2]
-            norm_vector += to_from
-
-            x.append(norm_vector[0, 0])
-            y.append(norm_vector[1, 0])
-            z.append(norm_vector[2, 0])
-
-            # # Distal Interphalangeal
-            # angle = math.acos(
-            #     norm_vector.dot(to_from)
-            #     / (np.linalg.norm(to_from) * np.linalg.norm(norm_vector))
-            # )
-
-            # fe_angle = 2 / 3 * angle
-            # norm_vector = norm_vector -
+    x, y, z = get_points_from_angles(
+        anchor_points,
+        bone_lengths,
+        joint_angles,
+    )
 
     ax2.scatter(x, y, z, s=[10] * len(x), alpha=1)
 
-    leap_data_points.append(joint_angles)
+    leap_joint_angle_samples.append(joint_angles)
 
 
-def on_myo_tracking_event(value, moving):
-    myo_values.append(value)
+def on_myo_tracking_event(sample, moving):
+    myo_samples.append(sample)
 
 
 def on_leap_tracking_event(event):
-    leap_values.append(event)
+    leap_samples.append(event)
 
 
 def leap_collect(callback):
@@ -260,6 +92,7 @@ def leap_collect(callback):
             self.callback(event)
 
     leap_connection = lp.Connection()
+
     leap_connection.set_tracking_mode(lp.TrackingMode.Desktop)
     leap_connection.add_listener(TrackingListener(callback))
 
@@ -269,58 +102,68 @@ def leap_collect(callback):
 
 def myo_collect(callback):
     myo = Myo(None, mode=emg_mode.RAW)
+
     myo.connect()
     myo.add_emg_handler(callback)
 
-    while True:
-        myo.run()
-
-
-def data_collect():
     running = True
 
     while running:
-        if not len(leap_data_points) or not myo_values:
+        myo.run()
+
+
+def data_collect(rows):
+    running = True
+
+    while running:
+        data = {}
+
+        # Leap DataFrame
+        leap_joint_angle_sample = (
+            leap_joint_angle_samples[-1] if len(leap_joint_angle_samples) else None
+        )
+
+        if not leap_joint_angle_sample:
             continue
 
-        leap_value = leap_data_points[len(leap_data_points) - 1]
-        myo_value = myo_values[len(myo_values) - 1]
+        for d, angles in leap_joint_angle_sample.items():
+            for a in angles:
+                data[f"{d}_{a}"] = [leap_joint_angle_sample[d][a]]
 
-        if not leap_value or not myo_value:
-            continue
+        # Myo DataFrame
+        # myo_sample = myo_samples[-1] if len(myo_samples) else None
 
-        # Myo
-        myo_df = pd.DataFrame([myo_value])
-        myo_df.columns = [f"channel_{x}" for x in myo_df.columns]
+        # if not myo_sample:
+        #     continue
 
-        # Leap
-        leap_data = {}
+        # for i in range(0, len(myo_sample)):
+        #     data[f"channel_{i}"] = myo_sample[i]
 
-        for digit, angles in leap_value.items():
-            for angle in angles:
-                leap_data[f"{digit}_{angle}"] = leap_value[digit][angle]
+        data["time"] = time.time()
 
-        leap_df = pd.DataFrame(leap_data)
-        new_df = pd.concat([myo_df, leap_df], axis=1)
-
-        df.append(new_df)
+        rows.append(data)
 
         time.sleep(1 / sample_rate)
 
 
 if __name__ == "__main__":
+    rows = []
+
     try:
-        leap_thread = threading.Thread(target=leap_collect, args=(on_leap_tracking_event,))
+        leap_thread = threading.Thread(
+            target=leap_collect, args=(on_leap_tracking_event,)
+        )
         myo_thread = threading.Thread(target=myo_collect, args=(on_myo_tracking_event,))
-        data_thread = threading.Thread(target=data_collect)
+        data_thread = threading.Thread(target=data_collect, args=(rows,))
 
         anim = animation.FuncAnimation(fig, animate, blit=False, interval=20)
 
         leap_thread.start()
-        myo_thread.start()
-
+        # myo_thread.start()
         data_thread.start()
 
         plt.show()
+
     finally:
+        df = pd.DataFrame(rows)
         df.to_csv("data.csv")
