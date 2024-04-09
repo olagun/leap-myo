@@ -1,10 +1,8 @@
 from myo_api import Myo, emg_mode
 import leap as lp
-import pandas as pd
 import matplotlib.pyplot as plt
 from matplotlib import animation
 import plot as leapplot
-import threading
 from utils import (
     get_anchor_points,
     get_joint_angles,
@@ -12,54 +10,18 @@ from utils import (
     get_points_from_angles,
 )
 import time
+from multiprocessing import Process, Queue, Manager
+import numpy as np
 
-# Settings
 sample_rate = 100
 
-# Samples
-myo_samples = []
-leap_samples = []
-leap_joint_angle_samples = []
 
-# Matplotlib
-fig = plt.figure()
-
-ax = fig.add_subplot(
-    121, projection="3d", xlim=(-300, 300), ylim=(-200, 400), zlim=(-300, 300)
-)
-
-ax2 = fig.add_subplot(
-    122, projection="3d", xlim=(-300, 300), ylim=(-200, 400), zlim=(-300, 300)
-)
-
-ax.view_init(elev=45.0, azim=122)
-ax2.view_init(elev=45.0, azim=122)
-
-
-def animate(frame):
-    leapplot.reset_plot(ax)
-    leapplot.reset_plot(ax2)
-
-    # Get hand
-    leap_sample = leap_samples[-1] if len(leap_samples) else None
-
-    if not leap_sample or len(leap_sample.hands) == 0:
+def leap_process_data(data, leap_data):
+    if not len(data.hands):
         return
 
-    hand = leap_sample.hands[0]
+    hand = data.hands[0]
 
-    # First plot
-    x, y, z = leapplot.get_bone_points(hand)
-
-    ax.scatter(
-        x,
-        y,
-        z,
-        s=[10] * len(x),
-        alpha=1,
-    )
-
-    # Second plot (reconstructed from joint angles)
     anchor_points = get_anchor_points(hand)
     joint_angles = get_joint_angles(hand)
     bone_lengths = get_bone_lengths(hand)
@@ -70,26 +32,18 @@ def animate(frame):
         joint_angles,
     )
 
-    ax2.scatter(x, y, z, s=[10] * len(x), alpha=1)
-
-    leap_joint_angle_samples.append(joint_angles)
-
-
-def on_myo_tracking_event(sample, moving):
-    myo_samples.append(sample)
+    leap_data["joint_angles"] = joint_angles
+    leap_data["input_points"] = leapplot.get_bone_points(hand)
+    leap_data["predicted_points"] = np.array([x, y, z])
 
 
-def on_leap_tracking_event(event):
-    leap_samples.append(event)
-
-
-def leap_collect(callback):
+def leap_collect(callback, leap_data):
     class TrackingListener(lp.Listener):
         def __init__(self, callback):
             self.callback = callback
 
         def on_tracking_event(self, event):
-            self.callback(event)
+            self.callback(event, leap_data)
 
     leap_connection = lp.Connection()
 
@@ -100,11 +54,11 @@ def leap_collect(callback):
         leap_connection._poll_loop()
 
 
-def myo_collect(callback):
+def myo_collect(myo_samples):
     myo = Myo(None, mode=emg_mode.RAW)
 
     myo.connect()
-    myo.add_emg_handler(callback)
+    myo.add_emg_handler(lambda x, _: myo_samples.append(x))
 
     running = True
 
@@ -112,32 +66,26 @@ def myo_collect(callback):
         myo.run()
 
 
-def data_collect(rows):
+def data_collect(rows, leap_samples, myo_samples):
     running = True
 
     while running:
         data = {}
 
         # Leap DataFrame
-        leap_joint_angle_sample = (
-            leap_joint_angle_samples[-1] if len(leap_joint_angle_samples) else None
-        )
-
-        if not leap_joint_angle_sample:
+        if not leap_samples["joint_angles"]:
             continue
 
-        for d, angles in leap_joint_angle_sample.items():
+        for d, angles in leap_samples["joint_angles"].items():
             for a in angles:
-                data[f"{d}_{a}"] = [leap_joint_angle_sample[d][a]]
+                data[f"{d}_{a}"] = [leap_samples["joint_angles"][d][a]]
 
         # Myo DataFrame
-        # myo_sample = myo_samples[-1] if len(myo_samples) else None
+        if not len(myo_samples)
+            continue
 
-        # if not myo_sample:
-        #     continue
-
-        # for i in range(0, len(myo_sample)):
-        #     data[f"channel_{i}"] = myo_sample[i]
+        for i in range(0, len(myo_samples)):
+            data[f"channel_{i}"] = myo_samples[i]
 
         data["time"] = time.time()
 
@@ -146,24 +94,63 @@ def data_collect(rows):
         time.sleep(1 / sample_rate)
 
 
+def plot(leap_data):
+    fig = plt.figure()
+
+    ax = fig.add_subplot(
+        121, projection="3d", xlim=(-300, 300), ylim=(-200, 400), zlim=(-300, 300)
+    )
+
+    ax2 = fig.add_subplot(
+        122, projection="3d", xlim=(-300, 300), ylim=(-200, 400), zlim=(-300, 300)
+    )
+
+    ax.view_init(elev=45.0, azim=122)
+    ax2.view_init(elev=45.0, azim=122)
+
+    def animate(frame):
+        leapplot.reset_plot(ax)
+        leapplot.reset_plot(ax2)
+
+        if not ("input_points" in leap_data) or not ("predicted_points" in leap_data):
+            return
+
+        # First plot
+        x, y, z = leap_data["input_points"]
+        ax.scatter(x, y, z, s=[10] * len(x), alpha=1)
+
+        # Second plot (reconstructed from joint angles)
+        x, y, z = leap_data["predicted_points"]
+        ax2.scatter(x, y, z, s=[10] * len(x), alpha=1)
+
+    anim = animation.FuncAnimation(fig, animate, blit=False, interval=20)
+
+    plt.show()
+
+
 if __name__ == "__main__":
-    rows = []
+    with Manager() as manager:
+        rows = manager.list()
 
-    try:
-        leap_thread = threading.Thread(
-            target=leap_collect, args=(on_leap_tracking_event,)
-        )
-        myo_thread = threading.Thread(target=myo_collect, args=(on_myo_tracking_event,))
-        data_thread = threading.Thread(target=data_collect, args=(rows,))
+        leap_data = manager.dict()
+        myo_data = manager.list()
 
-        anim = animation.FuncAnimation(fig, animate, blit=False, interval=20)
+        leap_thread = Process(target=leap_collect, args=(leap_process_data, leap_data))
+        # myo_thread = Process(target=myo_collect, args=(myo_data,))
+        plot_thread = Process(target=plot, args=(leap_data,))
+        data_thread = Process(target=data_collect, args=(rows, leap_data, myo_data))
 
         leap_thread.start()
         # myo_thread.start()
+        plot_thread.start()
         data_thread.start()
 
-        plt.show()
+        running = True
 
-    finally:
-        df = pd.DataFrame(rows)
-        df.to_csv("data.csv")
+        while running:
+            time.sleep(0)
+
+    # leap_thread.join()
+    # myo_thread.start()
+    # data_thread.start()
+    # plot_thread.start()

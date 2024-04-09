@@ -60,7 +60,7 @@ class Canvas:
                 digit = hand.digits[index_digit]
                 for index_bone in range(0, 4):
                     bone = digit.bones[index_bone]
-                    
+
                     if self.hands_format == "Dots":
                         prev_joint = self.get_joint_position(bone.prev_joint)
                         next_joint = self.get_joint_position(bone.next_joint)
