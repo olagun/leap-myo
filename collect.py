@@ -68,14 +68,19 @@ def myo_collect(myo_samples):
 
 
 def data_collect(rows, leap_samples, myo_samples):
+    data = {}
+
     running = True
 
+    start_time = time.time()
+
     while running:
-        time.sleep(1 / sample_rate)
+        curr_time = time.time()
 
-        data = {}
+        if curr_time - start_time < 1 / sample_rate:
+            continue
 
-        data["time"] = time.time()
+        data["time"] = curr_time
 
         # Leap DataFrame
         if not ("joint_angles" in leap_samples):
@@ -86,6 +91,8 @@ def data_collect(rows, leap_samples, myo_samples):
                 data[f"{d}_{a}"] = leap_samples["joint_angles"][d][a]
 
         rows.append(data)
+
+        start_time = time.time()
 
         # Myo DataFrame
         if not len(myo_samples):
@@ -144,14 +151,14 @@ if __name__ == "__main__":
             leap_thread = mp.Process(
                 target=leap_collect, args=(leap_process_data, leap_data)
             )
-            myo_thread = mp.Process(target=myo_collect, args=(myo_data,))
+            # myo_thread = mp.Process(target=myo_collect, args=(myo_data,))
             plot_thread = mp.Process(target=plot, args=(leap_data,))
             data_thread = mp.Process(
                 target=data_collect, args=(rows, leap_data, myo_data)
             )
 
             leap_thread.start()
-            myo_thread.start()
+            # myo_thread.start()
             plot_thread.start()
             data_thread.start()
 

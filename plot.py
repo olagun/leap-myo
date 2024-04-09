@@ -1,16 +1,5 @@
 import numpy as np
-import matplotlib.pyplot as plt
-import pandas as pd
-from matplotlib import animation
-from mpl_toolkits.mplot3d import Axes3D
 import mpl_toolkits.mplot3d as plt3d
-from utils import (
-    get_angles,
-    get_rot_from_angles,
-    quaternion_rotation_matrix,
-    get_angles_from_rot,
-    euler_from_quaternion,
-)
 
 # Leap Motion Hand Animation
 finger_bones = ["metacarpals", "proximal", "intermediate", "distal"]

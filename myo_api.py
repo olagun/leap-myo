@@ -573,6 +573,7 @@ class Myo(object):
         for h in self.battery_handlers:
             h(battery_level)
 
+
 if __name__ == "__main__":
     m = Myo(sys.argv[1] if len(sys.argv) >= 2 else None, mode=emg_mode.RAW)
 
@@ -594,7 +595,7 @@ if __name__ == "__main__":
     # try:
     #     while True:
     #         m.run()
-    
+
     # except KeyboardInterrupt:
     #     m.disconnect()
     #     quit()
