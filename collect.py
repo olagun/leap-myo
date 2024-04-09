@@ -10,10 +10,11 @@ from utils import (
     get_points_from_angles,
 )
 import time
-from multiprocessing import Process, Queue, Manager
+import multiprocessing as mp
 import numpy as np
+import pandas as pd
 
-sample_rate = 100
+sample_rate = 50
 
 
 def leap_process_data(data, leap_data):
@@ -70,28 +71,32 @@ def data_collect(rows, leap_samples, myo_samples):
     running = True
 
     while running:
+        time.sleep(1 / sample_rate)
+
         data = {}
 
+        data["time"] = time.time()
+
         # Leap DataFrame
-        if not leap_samples["joint_angles"]:
+        if not ("joint_angles" in leap_samples):
             continue
 
         for d, angles in leap_samples["joint_angles"].items():
             for a in angles:
-                data[f"{d}_{a}"] = [leap_samples["joint_angles"][d][a]]
-
-        # Myo DataFrame
-        if not len(myo_samples)
-            continue
-
-        for i in range(0, len(myo_samples)):
-            data[f"channel_{i}"] = myo_samples[i]
-
-        data["time"] = time.time()
+                data[f"{d}_{a}"] = leap_samples["joint_angles"][d][a]
 
         rows.append(data)
 
-        time.sleep(1 / sample_rate)
+        # Myo DataFrame
+        if not len(myo_samples):
+            continue
+
+        myo_sample = myo_samples[-1]
+
+        for i in range(0, len(myo_sample)):
+            data[f"channel_{i}"] = myo_sample[i]
+
+        rows.append(data)
 
 
 def plot(leap_data):
@@ -129,28 +134,31 @@ def plot(leap_data):
 
 
 if __name__ == "__main__":
-    with Manager() as manager:
-        rows = manager.list()
+    with mp.Manager() as manager:
+        try:
+            rows = manager.list()
 
-        leap_data = manager.dict()
-        myo_data = manager.list()
+            leap_data = manager.dict()
+            myo_data = manager.list()
 
-        leap_thread = Process(target=leap_collect, args=(leap_process_data, leap_data))
-        # myo_thread = Process(target=myo_collect, args=(myo_data,))
-        plot_thread = Process(target=plot, args=(leap_data,))
-        data_thread = Process(target=data_collect, args=(rows, leap_data, myo_data))
+            leap_thread = mp.Process(
+                target=leap_collect, args=(leap_process_data, leap_data)
+            )
+            myo_thread = mp.Process(target=myo_collect, args=(myo_data,))
+            plot_thread = mp.Process(target=plot, args=(leap_data,))
+            data_thread = mp.Process(
+                target=data_collect, args=(rows, leap_data, myo_data)
+            )
 
-        leap_thread.start()
-        # myo_thread.start()
-        plot_thread.start()
-        data_thread.start()
+            leap_thread.start()
+            myo_thread.start()
+            plot_thread.start()
+            data_thread.start()
 
-        running = True
+            running = True
 
-        while running:
-            time.sleep(0)
-
-    # leap_thread.join()
-    # myo_thread.start()
-    # data_thread.start()
-    # plot_thread.start()
+            while running:
+                time.sleep(0)
+        finally:
+            df = pd.DataFrame.from_dict(list(rows))
+            df.to_csv("data.csv")
