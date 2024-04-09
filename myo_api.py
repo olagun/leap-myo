@@ -591,10 +591,10 @@ if __name__ == "__main__":
     # m.set_leds([128, 128, 255], [128, 128, 255])  # purple logo and bar LEDs
     # m.vibrate(0)
 
-    try:
-        while True:
-            m.run()
+    # try:
+    #     while True:
+    #         m.run()
     
-    except KeyboardInterrupt:
-        m.disconnect()
-        quit()
+    # except KeyboardInterrupt:
+    #     m.disconnect()
+    #     quit()

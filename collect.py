@@ -11,13 +11,16 @@ import plot as leapplot
 import threading
 from utils import Ry, Rx, Rz
 import time
+from multiprocessing import Process
+
 
 # Settings
-sample_rate = 200
+sample_rate = 40
 
 # Data
 myo_values = []
 leap_values = []
+leap_data_points = []
 df = pd.DataFrame()
 
 NUM_POINTS = 30
@@ -54,7 +57,7 @@ def animate(frame):
     leap_value = leap_values[len(leap_values) - 1]
 
     # Make sure that there's at last one hand detected
-    if len(leap_value.hands) == 0:
+    if not leap_value or len(leap_value.hands) == 0:
         return
 
     hand = leap_value.hands[0]
@@ -145,18 +148,6 @@ def animate(frame):
     # Reconstruct hand from joint angles
     for digit, angle in joint_angles.items():
         if digit == "thumb":
-            value[f"{digit}_{angle["tm,f/e"]}"] = angle["tm,f/e"]
-            value[f"{digit}_{angle["tm,aa"]}"] = angle["tm,aa"]
-
-            value[f"{digit}_{angle["mcp,f/e"]}"] = angle["mcp,f/e"]
-            value[f"{digit}_{angle["mcp,aa"]}"] = angle["mcp,aa"]
-        else:
-            value[f"{digit}_{angle["mcp,f/e"]}"] = angle["mcp,f/e"]
-            value[f"{digit}_{angle["mcp,aa"]}"] = angle["mcp,aa"]
-            
-            value[f"{digit}_{angle["pip"]}"] = angle["pip"]
-
-        if digit == "thumb":
             anchor_point = np.array(
                 [
                     [-anchor_points[digit][1][0]],
@@ -173,7 +164,7 @@ def animate(frame):
             fe_angle = angle["tm,f/e"]
             aa_angle = angle["tm,aa"]
 
-            digit_vector = np.array([[0], [-bone_lengths[digit_labels[d]][1]], [0]])
+            digit_vector = np.array([[0], [-bone_lengths[digit][1]], [0]])
             to_from = anchor_point + np.dot(
                 Rz(-aa_angle), np.dot(Rx(-fe_angle), digit_vector)
             )
@@ -188,8 +179,11 @@ def animate(frame):
 
             norm_vector = to_from - anchor_point
             norm_vector /= np.linalg.norm(norm_vector)
-            norm_vector = np.dot(Rz(-aa_angle), np.dot(Rx(-fe_angle), norm_vector))
-            norm_vector *= bone_lengths[digit_labels[d]][2]
+            norm_vector = np.dot(
+                Rz(-aa_angle + angle["tm,aa"]),
+                np.dot(Rx(-fe_angle + angle["tm,f/e"]), norm_vector),
+            )
+            norm_vector *= bone_lengths[digit][2]
             norm_vector += to_from
 
             x.append(norm_vector[0, 0])
@@ -213,7 +207,7 @@ def animate(frame):
             fe_angle = angle["mcp,f/e"]
             aa_angle = angle["mcp,aa"]
 
-            digit_vector = np.array([[0], [-bone_lengths[digit_labels[d]][1]], [0]])
+            digit_vector = np.array([[0], [-bone_lengths[digit][1]], [0]])
             to_from = anchor_point + np.dot(
                 Rz(-aa_angle), np.dot(Rx(-fe_angle), digit_vector)
             )
@@ -228,7 +222,7 @@ def animate(frame):
             norm_vector = to_from - anchor_point
             norm_vector /= np.linalg.norm(norm_vector)
             norm_vector = Rx(-fe_angle) @ norm_vector
-            norm_vector *= bone_lengths[digit_labels[d]][2]
+            norm_vector *= bone_lengths[digit][2]
             norm_vector += to_from
 
             x.append(norm_vector[0, 0])
@@ -246,7 +240,7 @@ def animate(frame):
 
     ax2.scatter(x, y, z, s=[10] * len(x), alpha=1)
 
-    leap_values.append(value)
+    leap_data_points.append(joint_angles)
 
 
 def on_myo_tracking_event(value, moving):
@@ -283,43 +277,49 @@ def myo_collect(callback):
 
 
 def data_collect():
-    start_time = time.time()
     running = True
 
     while running:
-        curr_time = time.time()
+        if not len(leap_data_points) or not myo_values:
+            continue
 
-        if curr_time - start_time > 1 / sample_rate:
-            data = {
-                "timestamp": curr_time,
-            }
+        leap_value = leap_data_points[len(leap_data_points) - 1]
+        myo_value = myo_values[len(myo_values) - 1]
 
-            myo_value = myo_values[len(myo_values) - 1]
-            leap_value = leap_values[len(leap_values) - 1]
+        if not leap_value or not myo_value:
+            continue
 
-            # Myo
-            myo_df = pd.DataFrame(myo_value)
-            myo_df.columns = [f"channel_{x}" for x in myo_df.columns]
+        # Myo
+        myo_df = pd.DataFrame([myo_value])
+        myo_df.columns = [f"channel_{x}" for x in myo_df.columns]
 
-            # Leap
-            leap_df = pd.DataFrame(leap_value)
-            
-            df = pd.concat([myo_df, leap_df])
-            
-            start_time = time.time()
+        # Leap
+        leap_data = {}
+
+        for digit, angles in leap_value.items():
+            for angle in angles:
+                leap_data[f"{digit}_{angle}"] = leap_value[digit][angle]
+
+        leap_df = pd.DataFrame(leap_data)
+        new_df = pd.concat([myo_df, leap_df], axis=1)
+
+        df.append(new_df)
+
+        time.sleep(1 / sample_rate)
 
 
 if __name__ == "__main__":
     try:
-        leap_thread = threading.Thread(
-            target=leap_collect, args=(on_leap_tracking_event,)
-        )
+        leap_thread = threading.Thread(target=leap_collect, args=(on_leap_tracking_event,))
         myo_thread = threading.Thread(target=myo_collect, args=(on_myo_tracking_event,))
+        data_thread = threading.Thread(target=data_collect)
 
         anim = animation.FuncAnimation(fig, animate, blit=False, interval=20)
 
         leap_thread.start()
         myo_thread.start()
+
+        data_thread.start()
 
         plt.show()
     finally:
