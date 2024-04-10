@@ -1,6 +1,9 @@
 from matplotlib import pyplot as plt
 import numpy as np
 from myo_api import Myo, emg_mode
+import time
+from collections import Counter
+from multiprocessing import Queue, Process, Manager
 
 
 class MultichannelPlot(object):
@@ -29,28 +32,53 @@ class MultichannelPlot(object):
                 data = np.concatenate([np.zeros(self.xlen - len(data)), data])
             if len(data) > self.xlen:
                 data = data[-self.xlen :]
-            g.set_ydata(data * 20)
+            g.set_ydata(data)
         plt.draw()
         plt.pause(0.04)
 
 
-def main():
+def update_plot(emg_data):
     plotter = MultichannelPlot()
-    m = Myo(None, mode=emg_mode.RAW)
 
-    emg_data = []
-
-    def proc_emg(emg, moving):
-        emg_data.append(np.array(emg))
-
-    m.connect()
-    m.add_emg_handler(proc_emg)
-
-    running = True
-
-    while running:
-        m.run()
+    while True:
         plotter.update_plot(np.array(emg_data).T)
+
+
+def main():
+    with Manager() as manager:
+        m = Myo(None, mode=emg_mode.RAW)
+
+        emg_data = manager.list()
+        plotter_process = Process(target=update_plot, args=(emg_data,))
+
+        counter = Counter()
+        state = {}
+        state["start_time"] = time.time()
+
+        def proc_emg(emg, moving):
+            emg_data.append(emg)
+
+            state["curr_time"] = time.time()
+            counter["samples"] += 1
+
+            if state["curr_time"] - state["start_time"] > 1:
+                counter["samples_per_sec"] = counter["samples"]
+                counter["samples"] = 0
+
+                sps = counter["samples_per_sec"]
+                print(f"samples per second {sps}")
+
+                state["start_time"] = time.time()
+
+        m.connect()
+        m.add_emg_handler(proc_emg)
+
+        running = True
+
+        plotter_process.start()
+
+        while running:
+            m.run()
 
 
 if __name__ == "__main__":

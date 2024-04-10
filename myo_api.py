@@ -3,7 +3,8 @@ import re
 import struct
 import sys
 import threading
-
+from collections import Counter
+import time
 import serial
 from serial.tools.list_ports import comports
 
@@ -577,14 +578,28 @@ class Myo(object):
 if __name__ == "__main__":
     m = Myo(sys.argv[1] if len(sys.argv) >= 2 else None, mode=emg_mode.RAW)
 
+    counter = Counter()
+    state = {}
+    state["start_time"] = time.time()
+
     def proc_emg(emg, moving, times=[]):
-        print(emg)
+        state["curr_time"] = time.time()
+        counter["samples"] += 1
+
+        if state["curr_time"] - state["start_time"] > 1:
+            counter["samples_per_sec"] = counter["samples"]
+            counter["samples"] = 0
+
+            sps = counter["samples_per_sec"]
+            print(f"samples per second {sps}")
+
+            state["start_time"] = time.time()
 
     m.connect()
     # print(m.get_battery_level())
     m.add_emg_handler(proc_emg)
 
-    # m.power_off() 
+    # m.power_off()
 
     # m.add_arm_handler(lambda arm, xdir: print('arm', arm, 'xdir', xdir))
     # m.add_pose_handler(lambda p: print('pose', p))
