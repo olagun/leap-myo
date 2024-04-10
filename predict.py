@@ -8,22 +8,29 @@ from utils import (
     get_joint_angles,
     get_bone_lengths,
     get_points_from_angles,
+    digit_labels,
 )
 import time
 import multiprocessing as mp
 import numpy as np
 import pandas as pd
 import tensorflow as tf
+import json
+import math
 
-# from pandas.util import hash_pandas_object
-
-model = tf.keras.saving.load_model("model.keras")
+model = tf.keras.saving.load_model("model.h5")
 
 sample_rate = 50
 
 
+def constrain_angles(angles):
+    joint_angles = {}
+
+    return angles % (2 * math.pi)
+
+
 def leap_process_data(data, leap_data, myo_data):
-    if not len(data.hands):
+    if not len(data.hands) or not len(myo_data):
         return
 
     hand = data.hands[0]
@@ -32,10 +39,8 @@ def leap_process_data(data, leap_data, myo_data):
     myo_samples[:] = np.array(myo_data[:1000])
 
     anchor_points = get_anchor_points(hand)
-    joint_angles = model.predict(myo_samples)
+    joint_angles = constrain_angles(model.predict(myo_samples))
     bone_lengths = get_bone_lengths(hand)
-
-    print(joint_angles)
 
     x, y, z = get_points_from_angles(
         anchor_points,
@@ -47,13 +52,13 @@ def leap_process_data(data, leap_data, myo_data):
     leap_data["predicted_points"] = np.array([x, y, z])
 
 
-def leap_collect(callback, leap_data):
+def leap_collect(callback, leap_data, myo_data):
     class TrackingListener(lp.Listener):
         def __init__(self, callback):
             self.callback = callback
 
         def on_tracking_event(self, event):
-            self.callback(event, leap_data)
+            self.callback(event, leap_data, myo_data)
 
     leap_connection = lp.Connection()
 

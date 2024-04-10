@@ -534,9 +534,9 @@ class Myo(object):
     def set_leds(self, logo, line):
         self.write_attr(0x19, pack("8B", 6, 6, *(logo + line)))
 
-    # def get_battery_level(self):
-    #     battery_level = self.read_attr(0x11)
-    #     return ord(battery_level.payload[5])
+    def get_battery_level(self):
+        battery_level = self.read_attr(0x11)
+        return ord(battery_level.payload[5])
 
     def add_emg_handler(self, h):
         self.emg_handlers.append(h)
@@ -581,9 +581,10 @@ if __name__ == "__main__":
         print(emg)
 
     m.connect()
-    # m.add_emg_handler(proc_emg)
+    # print(m.get_battery_level())
+    m.add_emg_handler(proc_emg)
 
-    m.power_off()
+    # m.power_off() 
 
     # m.add_arm_handler(lambda arm, xdir: print('arm', arm, 'xdir', xdir))
     # m.add_pose_handler(lambda p: print('pose', p))
@@ -592,10 +593,10 @@ if __name__ == "__main__":
     # m.set_leds([128, 128, 255], [128, 128, 255])  # purple logo and bar LEDs
     # m.vibrate(0)
 
-    # try:
-    #     while True:
-    #         m.run()
+    try:
+        while True:
+            m.run()
 
-    # except KeyboardInterrupt:
-    #     m.disconnect()
-    #     quit()
+    except KeyboardInterrupt:
+        m.disconnect()
+        quit()

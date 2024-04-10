@@ -113,17 +113,17 @@ model.compile(
 )
 
 batch_size = 128
-epochs = 10
+epochs = 2
 
-print(df)
+# print(df)
 # print(y_train)
 
-# model.fit(
-#     np.array(x_train),
-#     np.array(y_train),
-#     batch_size=batch_size,
-#     epochs=epochs,
-#     validation_split=0.15,
-# )
+model.fit(
+    np.array(x_train),
+    np.array(y_train),
+    batch_size=batch_size,
+    epochs=epochs,
+    validation_split=0.15,
+)
 
-# model.save("model.keras")
+model.save("model.h5")
