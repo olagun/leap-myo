@@ -11,8 +11,8 @@ This project correlates hand landmarks from a Leap Motion Controller with EMG da
 ## Getting started
 
 - Install [Ultraleap Gemini](https://leap2.ultraleap.com/gemini-downloads/)
-<!-- - Install the necessary python packages `pip3 install -m requirements.txt` -->
 - Charge your Myo Armband and have your Leap Motion Controlller on hand
+<!-- - Install the necessary python packages `pip3 install -m requirements.txt` -->
 
 ## Usage
 
