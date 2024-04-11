@@ -15,6 +15,7 @@ import multiprocessing as mp
 import numpy as np
 import pandas as pd
 from collections import Counter
+import math
 
 sample_rate = 200
 
@@ -119,7 +120,7 @@ def data_collect(rows, leap_samples, myo_samples):
 
         for d, angles in leap_samples["joint_angles"].items():
             for a in angles:
-                data[f"{d}_{a}"] = leap_samples["joint_angles"][d][a]
+                data[f"{d}_{a}"] = math.degrees(leap_samples["joint_angles"][d][a])
 
         # Myo DataFrame
         if not len(myo_samples):

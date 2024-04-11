@@ -40,16 +40,6 @@ for i in range(0, df.shape[0] - 1000):
     y_train.append(joint_angles.iloc[i + 999])
 
 
-def loss_mse(indices, y_actual, y_predicted):
-    return K.mean(
-        K.square(
-            np.take(y_actual.numpy(), indices, axis=1)
-            - np.take(y_predicted.numpy(), indices, axis=1)
-        ),
-        axis=-1,
-    )
-
-
 def identity_block(x):
     x_skip = x
 
@@ -109,18 +99,19 @@ model.compile(
     loss="mse",
     optimizer=tf.keras.optimizers.legacy.Adam(learning_rate=0.01),
     metrics=["accuracy"],
-    run_eagerly=True,
 )
 
 batch_size = 128
 epochs = 2
 
-# print(df)
-# print(y_train)
+x_train = np.array(x_train)
+y_train = np.array(y_train)
+
+# x_train = x_train.reshape((x_train.shape[0], 1000, 8, 1))
 
 model.fit(
-    np.array(x_train),
-    np.array(y_train),
+    x_train,
+    y_train,
     batch_size=batch_size,
     epochs=epochs,
     validation_split=0.15,

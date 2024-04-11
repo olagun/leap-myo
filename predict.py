@@ -22,11 +22,38 @@ model = tf.keras.saving.load_model("model.h5")
 
 sample_rate = 50
 
+angle_labels = [
+    "thumb_tm,f/e",
+    "thumb_tm,aa",
+    "thumb_mcp,f/e",
+    "thumb_mcp,aa",
+    "index_mcp,f/e",
+    "index_mcp,aa",
+    "index_pip",
+    "middle_mcp,f/e",
+    "middle_mcp,aa",
+    "middle_pip",
+    "ring_mcp,f/e",
+    "ring_mcp,aa",
+    "ring_pip",
+    "pinky_mcp,f/e",
+    "pinky_mcp,aa",
+    "pinky_pip",
+]
 
-def constrain_angles(angles):
+
+def get_angles_from_prediction(angles):
     joint_angles = {}
 
-    return angles % (2 * math.pi)
+    for i in range(angles.shape[1]):
+        digit, angle = angle_labels[i].split("_")
+
+        if digit not in joint_angles:
+            joint_angles[digit] = {}
+
+        joint_angles[digit][angle] = math.radians(angles[0, i])
+
+    return joint_angles
 
 
 def leap_process_data(data, leap_data, myo_data):
@@ -36,10 +63,17 @@ def leap_process_data(data, leap_data, myo_data):
     hand = data.hands[0]
 
     myo_samples = np.zeros((1000, 8))
-    myo_samples[:] = np.array(myo_data[:1000])
+    myo_array = np.array(myo_data[:1000])
+    myo_samples[0 : myo_array.shape[0], 0:8] = myo_array
 
+    # https://stackoverflow.com/a/61075207
+    # https://stackoverflow.com/a/51926373
+    myo_samples = myo_samples.reshape((1, 1000, 8, 1))
     anchor_points = get_anchor_points(hand)
-    joint_angles = constrain_angles(model.predict(myo_samples))
+
+    # https://stackoverflow.com/a/72601148
+    prediction = model.predict(myo_samples, verbose=False)
+    joint_angles = get_angles_from_prediction(prediction)
     bone_lengths = get_bone_lengths(hand)
 
     x, y, z = get_points_from_angles(
@@ -117,28 +151,23 @@ def plot(leap_data):
 
 if __name__ == "__main__":
     with mp.Manager() as manager:
-        try:
-            rows = manager.list()
+        rows = manager.list()
 
-            leap_data = manager.dict()
-            myo_data = manager.list()
+        leap_data = manager.dict()
+        myo_data = manager.list()
 
-            leap_thread = mp.Process(
-                target=leap_collect,
-                args=(leap_process_data, leap_data, myo_data),
-            )
-            myo_thread = mp.Process(target=myo_collect, args=(myo_data,))
-            plot_thread = mp.Process(target=plot, args=(leap_data,))
+        leap_thread = mp.Process(
+            target=leap_collect,
+            args=(leap_process_data, leap_data, myo_data),
+        )
+        myo_thread = mp.Process(target=myo_collect, args=(myo_data,))
+        plot_thread = mp.Process(target=plot, args=(leap_data,))
 
-            leap_thread.start()
-            myo_thread.start()
-            plot_thread.start()
+        leap_thread.start()
+        myo_thread.start()
+        plot_thread.start()
 
-            running = True
+        running = True
 
-            while running:
-                time.sleep(0)
-
-        finally:
-            df = pd.DataFrame(list(rows))
-            df.to_csv("data.csv", index=False)
+        while running:
+            time.sleep(0)
