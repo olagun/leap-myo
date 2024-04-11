@@ -1,3 +1,4 @@
+from leap.events import Event
 from myo_api import Myo, emg_mode
 import leap as lp
 import matplotlib.pyplot as plt
@@ -13,6 +14,7 @@ import time
 import multiprocessing as mp
 import numpy as np
 import pandas as pd
+from collections import Counter
 
 sample_rate = 200
 
@@ -23,28 +25,46 @@ def leap_process_data(data, leap_data):
 
     hand = data.hands[0]
 
-    anchor_points = get_anchor_points(hand)
+    # anchor_points = get_anchor_points(hand)
     joint_angles = get_joint_angles(hand)
-    bone_lengths = get_bone_lengths(hand)
+    # bone_lengths = get_bone_lengths(hand)
 
-    x, y, z = get_points_from_angles(
-        anchor_points,
-        bone_lengths,
-        joint_angles,
-    )
+    # x, y, z = get_points_from_angles(
+    #     anchor_points,
+    #     bone_lengths,
+    #     joint_angles,
+    # )
 
     leap_data["joint_angles"] = joint_angles
     leap_data["input_points"] = leapplot.get_bone_points(hand)
-    leap_data["predicted_points"] = np.array([x, y, z])
+    # leap_data["predicted_points"] = np.array([x, y, z])
 
 
 def leap_collect(callback, leap_data):
+    counter = Counter()
+
+    state = {}
+    state["start_time"] = time.time()
+
     class TrackingListener(lp.Listener):
         def __init__(self, callback):
             self.callback = callback
 
+        def on_connection_event(self, _):
+            print("leap connected")
+
         def on_tracking_event(self, event):
             self.callback(event, leap_data)
+
+            counter["samples"] += 1
+
+            if time.time() - state["start_time"] > 1:
+                state["samples_per_second"] = counter["samples"]
+                state["start_time"] = time.time()
+                counter["samples"] = 0
+
+                samples_per_second = state["samples_per_second"]
+                print(f"leap samples per second: {samples_per_second}")
 
     leap_connection = lp.Connection()
 
@@ -58,8 +78,26 @@ def leap_collect(callback, leap_data):
 def myo_collect(myo_samples):
     myo = Myo(None, mode=emg_mode.RAW)
 
+    counter = Counter()
+
+    state = {}
+    state["start_time"] = time.time()
+
+    def emg_handler(emg_data, _):
+        myo_samples.append(emg_data)
+
+        counter["samples"] += 1
+
+        if time.time() - state["start_time"] > 1:
+            state["samples_per_second"] = counter["samples"]
+            state["start_time"] = time.time()
+            counter["samples"] = 0
+
+            samples_per_second = state["samples_per_second"]
+            print(f"myo samples per second: {samples_per_second}")
+
     myo.connect()
-    myo.add_emg_handler(lambda x, _: myo_samples.append(x))
+    myo.add_emg_handler(emg_handler)
 
     running = True
 
@@ -72,15 +110,8 @@ def data_collect(rows, leap_samples, myo_samples):
 
     running = True
 
-    start_time = time.time()
-
     while running:
-        curr_time = time.time()
-
-        if curr_time - start_time < 1 / sample_rate:
-            continue
-
-        data["time"] = curr_time
+        data["time"] = time.time()
 
         # Leap DataFrame
         if not ("joint_angles" in leap_samples):
@@ -89,10 +120,6 @@ def data_collect(rows, leap_samples, myo_samples):
         for d, angles in leap_samples["joint_angles"].items():
             for a in angles:
                 data[f"{d}_{a}"] = leap_samples["joint_angles"][d][a]
-
-        rows.append(data)
-
-        start_time = time.time()
 
         # Myo DataFrame
         if not len(myo_samples):
@@ -156,15 +183,18 @@ if __name__ == "__main__":
                 ),
             )
             myo_thread = mp.Process(target=myo_collect, args=(myo_data,))
-            plot_thread = mp.Process(target=plot, args=(leap_data,))
+
             data_thread = mp.Process(
                 target=data_collect, args=(rows, leap_data, myo_data)
             )
 
             leap_thread.start()
             myo_thread.start()
-            plot_thread.start()
             data_thread.start()
+
+            # Reduces sampling rate
+            # plot_thread = mp.Process(target=plot, args=(leap_data,))
+            # plot_thread.start()
 
             running = True
 

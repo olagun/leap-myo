@@ -597,9 +597,9 @@ if __name__ == "__main__":
 
     m.connect()
     # print(m.get_battery_level())
-    m.add_emg_handler(proc_emg)
+    # m.add_emg_handler(proc_emg)
 
-    # m.power_off()
+    m.power_off()
 
     # m.add_arm_handler(lambda arm, xdir: print('arm', arm, 'xdir', xdir))
     # m.add_pose_handler(lambda p: print('pose', p))
